@@ -49,6 +49,9 @@
                     <a href="{{ url_for('operations.create_invoice') }}?supplier_id={{ supplier.id }}&type=purchase" class="btn btn-primary">
                         <i class="fas fa-file-invoice-dollar me-1"></i> فاتورة جديدة
                     </a>
+                    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteSupplierModal">
+                        <i class="fas fa-trash-alt me-1"></i> حذف المورد
+                    </button>
                 </div>
             </div>
         </div>
