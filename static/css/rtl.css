@@ -1,0 +1,64 @@
+/* RTL specific styles */
+
+/* Adjust sidebar and main content for RTL */
+.sidebar {
+    right: 0;
+    left: auto;
+}
+
+.main-content {
+    margin-right: var(--sidebar-width);
+    margin-left: 0;
+}
+
+.sidebar .nav-link.active {
+    border-right: 4px solid #0d6efd;
+    border-left: none;
+}
+
+/* Responsive adjustments for RTL */
+@media (max-width: 992px) {
+    .sidebar {
+        margin-right: -250px;
+        margin-left: 0;
+    }
+    
+    .sidebar.active {
+        margin-right: 0;
+    }
+    
+    .main-content {
+        margin-right: 0;
+    }
+    
+    .main-content.active {
+        margin-right: 250px;
+        margin-left: -250px;
+    }
+}
+
+/* Misc RTL adjustments */
+.form-check {
+    padding-right: 1.5em;
+    padding-left: 0;
+}
+
+.form-check .form-check-input {
+    float: right;
+    margin-right: -1.5em;
+    margin-left: 0;
+}
+
+.dropdown-menu {
+    text-align: right;
+}
+
+.alert-dismissible {
+    padding-right: 1rem;
+    padding-left: 4rem;
+}
+
+.alert-dismissible .btn-close {
+    left: 0;
+    right: auto;
+}

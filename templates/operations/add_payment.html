@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}إضافة دفعة جديدة - فاتورة رقم {{ invoice.invoice_number }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">لوحة التحكم</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('operations.index') }}">العمليات والفواتير</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('operations.view_invoice', invoice_id=invoice.id) }}">{{ invoice.invoice_number }}</a></li>
+                    <li class="breadcrumb-item active">إضافة دفعة</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Invoice Summary -->
+        <div class="col-lg-4 mb-4">
+            <div class="card border-0 shadow h-100">
+                <div class="card-header bg-dark">
+                    <h5 class="mb-0 text-white">ملخص الفاتورة</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="text-muted">رقم الفاتورة</h6>
+                        <h5>{{ invoice.invoice_number }}</h5>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="text-muted">إجمالي الفاتورة</h6>
+                        <h5>{{ invoice.total_amount|egp }}</h5>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="text-muted">المبلغ المدفوع</h6>
+                        <h5>{{ invoice.calculate_paid_amount()|egp }}</h5>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="text-muted">المبلغ المتبقي</h6>
+                        <h5 class="text-danger">{{ invoice.calculate_remaining_amount()|egp }}</h5>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment Form -->
+        <div class="col-lg-8 mb-4">
+            <div class="card border-0 shadow h-100">
+                <div class="card-header bg-dark">
+                    <h5 class="mb-0 text-white">تفاصيل الدفعة</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('operations.add_payment', invoice_id=invoice.id) }}">
+                        {{ form.hidden_tag() }}
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="amount" class="form-label">المبلغ <span class="text-danger">*</span></label>
+                                {{ form.amount(class="form-control" + (" is-invalid" if form.amount.errors else ""), placeholder="أدخل المبلغ") }}
+                                {% if form.amount.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.amount.errors %}
+                                            {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                                <small class="form-text text-muted">المبلغ المتبقي: {{ invoice.calculate_remaining_amount()|egp }}</small>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="payment_date" class="form-label">تاريخ الدفع <span class="text-danger">*</span></label>
+                                {{ form.payment_date(class="form-control" + (" is-invalid" if form.payment_date.errors else ""), type="date") }}
+                                {% if form.payment_date.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.payment_date.errors %}
+                                            {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="payment_method" class="form-label">طريقة الدفع <span class="text-danger">*</span></label>
+                                {{ form.payment_method(class="form-select" + (" is-invalid" if form.payment_method.errors else "")) }}
+                                {% if form.payment_method.errors %}
+                                    <div class="invalid-feedback">
+                                        {% for error in form.payment_method.errors %}
+                                            {{ error }}
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="reference_number" class="form-label">الرقم المرجعي</label>
+                                {{ form.reference_number(class="form-control", placeholder="رقم الشيك / التحويل") }}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">ملاحظات</label>
+                            {{ form.notes(class="form-control", rows="3", placeholder="ملاحظات إضافية") }}
+                        </div>
+
+                        <div class="d-flex justify-content-between mt-4">
+                            <a href="{{ url_for('operations.view_invoice', invoice_id=invoice.id) }}" class="btn btn-light">
+                                <i class="fas fa-arrow-right me-1"></i> رجوع
+                            </a>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-save me-1"></i> تسجيل الدفعة
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const amountInput = document.getElementById('amount');
+        if (amountInput) {
+            amountInput.addEventListener('input', function() {
+                this.value = this.value.replace(/[^0-9.]/g, '');
+            });
+        }
+    });
+</script>
+{% endblock %}
+{% endblock %}

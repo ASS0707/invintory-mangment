@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+
+{% block title %}تعديل بيانات العميل - نظام إدارة مبيعات الملابس{% endblock %}
+
+{% block breadcrumb %}
+<li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">الرئيسية</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('clients.index') }}">العملاء</a></li>
+<li class="breadcrumb-item"><a href="{{ url_for('clients.view', client_id=client.id) }}">{{ client.name }}</a></li>
+<li class="breadcrumb-item active">تعديل بيانات</li>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">تعديل بيانات العميل: {{ client.name }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('clients.edit', client_id=client.id) }}">
+                    {{ form.hidden_tag() }}
+                    
+                    <div class="mb-3">
+                        <label for="name" class="form-label">اسم العميل <span class="text-danger">*</span></label>
+                        {{ form.name(class="form-control" + (" is-invalid" if form.name.errors else ""), placeholder="أدخل اسم العميل") }}
+                        {% if form.name.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.name.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="phone" class="form-label">رقم الهاتف <span class="text-danger">*</span></label>
+                        {{ form.phone(class="form-control" + (" is-invalid" if form.phone.errors else ""), placeholder="أدخل رقم هاتف العميل") }}
+                        {% if form.phone.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.phone.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">البريد الإلكتروني</label>
+                        {{ form.email(class="form-control" + (" is-invalid" if form.email.errors else ""), placeholder="أدخل البريد الإلكتروني للعميل") }}
+                        {% if form.email.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.email.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="address" class="form-label">العنوان</label>
+                        {{ form.address(class="form-control" + (" is-invalid" if form.address.errors else ""), placeholder="أدخل عنوان العميل", rows=3) }}
+                        {% if form.address.errors %}
+                            <div class="invalid-feedback">
+                                {% for error in form.address.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('clients.view', client_id=client.id) }}" class="btn btn-light">
+                            <i class="fas fa-arrow-right me-1"></i> رجوع
+                        </a>
+                        <button type="submit" class="btn btn-warning">
+                            <i class="fas fa-edit me-1"></i> تحديث البيانات
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
