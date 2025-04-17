@@ -54,7 +54,7 @@
    python main.py
    ```
 
-5. افتح المتصفح واذهب إلى `http://localhost:5000`
+5. افتح المتصفح واذهب إلى `http://localhost:5500`
 
 ## النشر على منصة Railway
 

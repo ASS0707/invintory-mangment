@@ -25,6 +25,11 @@
             <a href="{{ url_for('operations.create_invoice') }}?client_id={{ client.id }}" class="btn btn-primary">
                 <i class="fas fa-file-invoice me-1"></i> إنشاء فاتورة جديدة
             </a>
+            {% if current_user.role == 'admin' %}
+            <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteClientModal">
+                <i class="fas fa-trash me-1"></i> حذف العميل
+            </button>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -182,6 +187,9 @@
                             <th>رقم الفاتورة</th>
                             <th>رقم مرجعي</th>
                             <th>ملاحظات</th>
+                            {% if current_user.role == 'admin' %}
+                            <th>إجراءات</th>
+                            {% endif %}
                         </tr>
                     </thead>
                     <tbody>
@@ -211,10 +219,17 @@
                             </td>
                             <td>{{ payment.reference_number or '-' }}</td>
                             <td>{{ payment.notes or '-' }}</td>
+                            {% if current_user.role == 'admin' %}
+                            <td>
+                                <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deletePaymentModal{{ payment.id }}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                            {% endif %}
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="6" class="text-center py-4">
+                            <td colspan="{% if current_user.role == 'admin' %}7{% else %}6{% endif %}" class="text-center py-4">
                                 <div class="text-muted">
                                     <i class="fas fa-money-bill fa-2x mb-3"></i>
                                     <p>لا توجد مدفوعات لهذا العميل.</p>
@@ -228,4 +243,54 @@
         </div>
     </div>
 </div>
+
+<!-- Delete Client Modal -->
+<div class="modal fade" id="deleteClientModal" tabindex="-1" aria-labelledby="deleteClientModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteClientModalLabel">تأكيد حذف العميل</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>هل أنت متأكد من حذف العميل "{{ client.name }}"؟</p>
+                <p class="text-danger">سيتم حذف جميع الفواتير والمدفوعات المرتبطة بهذا العميل.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <form action="{{ url_for('clients.delete', client_id=client.id) }}" method="post" class="d-inline">
+                    {{ delete_client_form.hidden_tag() }}
+                    <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Payment Modals -->
+{% for payment in payments %}
+<div class="modal fade" id="deletePaymentModal{{ payment.id }}" tabindex="-1" aria-labelledby="deletePaymentModalLabel{{ payment.id }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deletePaymentModalLabel{{ payment.id }}">تأكيد حذف الدفعة</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>هل أنت متأكد من حذف الدفعة بقيمة {{ payment.amount|egp }} بتاريخ {{ payment.payment_date|aradate }}؟</p>
+                {% if payment.invoice %}
+                <p class="text-danger">سيتم تحديث حالة الفاتورة رقم {{ payment.invoice.invoice_number }} والمبلغ المتبقي تلقائياً.</p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <form action="{{ url_for('operations.delete_payment', payment_id=payment.id) }}" method="post" class="d-inline">
+                    {{ delete_payment_forms[payment.id].hidden_tag() }}
+                    <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 {% endblock %}

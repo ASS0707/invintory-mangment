@@ -5,7 +5,8 @@ from routes import admin_required
 
 from app import db
 from models import Supplier, Invoice, Payment, SystemLog
-from forms.suppliers import SupplierForm
+from forms.suppliers import SupplierForm, DeleteSupplierForm
+from forms.operations import DeletePaymentForm
 
 suppliers_bp = Blueprint('suppliers', __name__, url_prefix='/suppliers')
 
@@ -81,6 +82,9 @@ def view(supplier_id):
     total_paid = sum(payment.amount for payment in payments)
     balance = total_purchased - total_returns - total_paid
     
+    delete_supplier_form = DeleteSupplierForm()
+    delete_payment_forms = {payment.id: DeletePaymentForm() for payment in payments}
+    
     return render_template(
         'suppliers/view.html',
         supplier=supplier,
@@ -89,7 +93,9 @@ def view(supplier_id):
         total_purchased=total_purchased,
         total_returns=total_returns,
         total_paid=total_paid,
-        balance=balance
+        balance=balance,
+        delete_supplier_form=delete_supplier_form,
+        delete_payment_forms=delete_payment_forms
     )
 
 
@@ -121,6 +127,35 @@ def edit(supplier_id):
     
     return render_template('suppliers/edit.html', form=form, supplier=supplier)
 
+
+@suppliers_bp.route('/delete/<int:supplier_id>', methods=['POST'])
+@login_required
+@admin_required
+def delete(supplier_id):
+    form = DeleteSupplierForm()
+    if not form.validate_on_submit():
+        flash('خطأ في التحقق من صحة النموذج', 'danger')
+        return redirect(url_for('suppliers.view', supplier_id=supplier_id))
+
+    supplier = Supplier.query.get_or_404(supplier_id)
+    
+    # Get related data for logging
+    invoice_count = len(supplier.invoices)
+    payment_count = len(supplier.payments)
+    
+    # Log the deletion with details
+    log = SystemLog(
+        action='supplier_delete',
+        details=f'حذف المورد: {supplier.name} مع {invoice_count} فاتورة و {payment_count} دفعة',
+        user_id=current_user.id
+    )
+    
+    db.session.add(log)
+    db.session.delete(supplier)  # This will cascade delete all related records
+    db.session.commit()
+    
+    flash(f'تم حذف المورد {supplier.name} وجميع السجلات المرتبطة به بنجاح', 'success')
+    return redirect(url_for('suppliers.index'))
 
 @suppliers_bp.route('/add_payment/<int:supplier_id>', methods=['GET', 'POST'])
 @login_required

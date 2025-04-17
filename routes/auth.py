@@ -4,10 +4,11 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import datetime, timedelta
 import ipaddress
 
-from app import db, mail
+from flask_mail import Message
 from models import User, LoginLog
 from forms.auth import LoginForm, ChangePasswordForm
-from flask_mail import Message
+from database import db
+from mail import mail
 
 auth_bp = Blueprint('auth', __name__)
 

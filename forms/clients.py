@@ -9,3 +9,7 @@ class ClientForm(FlaskForm):
     email = StringField('البريد الإلكتروني', validators=[Optional(), Email()])
     address = TextAreaField('العنوان', validators=[Optional()])
     submit = SubmitField('حفظ')
+
+
+class DeleteClientForm(FlaskForm):
+    submit = SubmitField('تأكيد الحذف')

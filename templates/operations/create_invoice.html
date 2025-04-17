@@ -183,6 +183,11 @@
                             <option value="{{ product.id }}" data-quantity="{{ product.quantity }}">{{ product.name }} ({{ product.color }})</option>
                             {% endfor %}
                         </select>
+                        <div class="mt-1">
+                            <a href="{{ url_for('inventory.add_new_product') }}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                                <i class="fas fa-plus me-1"></i>إضافة منتج جديد
+                            </a>
+                        </div>
                         <div class="invalid-feedback" id="productError">يرجى اختيار المنتج</div>
                     </div>
                     <div class="mb-3">

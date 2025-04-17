@@ -6,8 +6,13 @@ import random
 import string
 from app import db
 from models import Invoice, InvoiceItem, Product, Client, Supplier, Payment, SystemLog
-from forms.operations import PaymentForm, InvoiceForm
+from forms.operations import PaymentForm, InvoiceForm, DeletePaymentForm, DeleteInvoiceForm
 from routes import admin_required
+from notifications import send_message
+
+# Make calculate methods on Invoice accessible in templates
+Invoice.calculate_paid_amount
+Invoice.calculate_remaining_amount
 
 operations_bp = Blueprint('operations', __name__, url_prefix='/operations')
 
@@ -55,14 +60,38 @@ def index():
 
     # Execute query with pagination
     operations = query.order_by(desc(Invoice.date)).paginate(page=page, per_page=per_page)
+    # Sync invoice statuses with actual payments
+    for op in operations.items:
+        op.update_status()
+    db.session.commit()
 
     # Get clients and suppliers for filters
     clients = Client.query.order_by(Client.name).all()
     suppliers = Supplier.query.order_by(Supplier.name).all()
 
+    # Fetch all payments (invoice and general)
+    payments = Payment.query.order_by(desc(Payment.payment_date)).all()
+    delete_payment_form = DeletePaymentForm()
+
+    # Compute cash balance: treat general expenses and certain invoice payments as outflow
+    cash_balance = 0
+    for payment in payments:
+        if payment.invoice_id:
+            # Inflow for sales and supplier returns
+            if payment.invoice.type in ['sale', 'supplier_return']:
+                cash_balance += payment.amount
+            else:
+                cash_balance -= payment.amount
+        else:
+            # General company expense
+            cash_balance -= payment.amount
+
     return render_template(
         'operations/index.html',
         operations=operations,
+        payments=payments,
+        delete_payment_form=delete_payment_form,
+        cash_balance=cash_balance,
         clients=clients,
         suppliers=suppliers
     )
@@ -176,6 +205,9 @@ def create_invoice():
             db.session.add(log)
             db.session.commit()
 
+            # Telegram notification for invoice creation
+            send_message(f"تم إنشاء {action}: {invoice.invoice_number} بقيمة {total_amount:.2f} ج.م")
+
             flash(f'تم إنشاء الفاتورة {invoice.invoice_number} بنجاح', 'success')
             return redirect(url_for('operations.view_invoice', invoice_id=invoice.id))
 
@@ -214,6 +246,8 @@ def view_invoice(invoice_id):
     total_paid = sum(payment.amount for payment in payments)
     remaining = invoice.total_amount - total_paid
 
+    delete_payment_forms = {payment.id: DeletePaymentForm() for payment in payments}
+    delete_invoice_form = DeleteInvoiceForm()
     return render_template(
         'operations/view_invoice.html',
         invoice=invoice,
@@ -222,7 +256,9 @@ def view_invoice(invoice_id):
         items=items,
         payments=payments,
         total_paid=total_paid,
-        remaining=remaining
+        remaining=remaining,
+        delete_payment_forms=delete_payment_forms,
+        delete_invoice_form=delete_invoice_form
     )
 
 
@@ -279,13 +315,13 @@ def edit_invoice(invoice_id):
 
                 # Reverse the previous quantity change
                 if invoice.type == 'sale':
-                    product.quantity += item.quantity
+                    product.quantity += item.quantity  # Restore sold quantity
                 elif invoice.type == 'purchase':
-                    product.quantity -= item.quantity
+                    product.quantity -= item.quantity  # Remove purchased quantity
                 elif invoice.type == 'return':
-                    product.quantity -= item.quantity
+                    product.quantity -= item.quantity  # Remove returned quantity
                 elif invoice.type == 'supplier_return':
-                    product.quantity += item.quantity
+                    product.quantity += item.quantity  # Restore returned quantity
 
                 db.session.delete(item)
 
@@ -339,7 +375,7 @@ def edit_invoice(invoice_id):
             db.session.commit()
 
             flash(f'تم تحديث الفاتورة {invoice.invoice_number} بنجاح', 'success')
-            return redirect(url_for('operations.view_invoice', invoice_id=invoice.id))
+            return redirect(url_for('inventory.index'))
 
     # Get existing items
     items = InvoiceItem.query.filter_by(invoice_id=invoice_id).all()
@@ -354,6 +390,91 @@ def edit_invoice(invoice_id):
         items=items,
         products=products
     )
+
+
+@operations_bp.route('/add_payment', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def add_general_payment():
+    form = PaymentForm()
+    # Populate clients for general payment allocation
+    # Only real clients so payments auto-link to invoices
+    form.client_id.choices = [(c.id, c.name) for c in Client.query.order_by(Client.name).all()]
+
+    if form.validate_on_submit():
+        try:
+            payment_amount = round(float(form.amount.data), 2)
+            if payment_amount <= 0:
+                flash('مبلغ الدفع يجب أن يكون أكبر من 0', 'danger')
+                return redirect(url_for('operations.add_general_payment'))
+            # Build allocations: oldest invoices first
+            remaining = payment_amount
+            allocations = []
+            if form.client_id.data:
+                client_id = form.client_id.data
+                # allocate to oldest unpaid sales invoices first
+                invoices = Invoice.query.filter(
+                    Invoice.client_id == client_id,
+                    Invoice.type == 'sale',
+                    Invoice.status != 'paid'
+                ).order_by(Invoice.date.asc()).all()
+                for inv in invoices:
+                    rem_amt = inv.calculate_remaining_amount()
+                    if rem_amt <= 0:
+                        continue
+                    alloc = min(remaining, rem_amt)
+                    allocations.append((inv, alloc))
+                    remaining -= alloc
+                    if remaining <= 0:
+                        break
+                # If there is still remaining amount after all invoices are paid, add as unlinked
+                if remaining > 0:
+                    allocations.append((None, remaining))
+                # If there were no unpaid invoices at all, allocate the whole payment as unlinked
+                if not allocations:
+                    allocations.append((None, payment_amount))
+            else:
+                # No client selected: general unlinked payment
+                allocations.append((None, payment_amount))
+            # Create payments and logs
+            msg_parts = []
+            for inv2, amt in allocations:
+                pay = Payment(
+                    amount=amt,
+                    payment_date=form.payment_date.data,
+                    payment_method=form.payment_method.data,
+                    reference_number=form.reference_number.data,
+                    notes=form.notes.data,
+                    created_by=current_user.id,
+                    client_id=form.client_id.data if form.client_id.data else None
+                )
+                if inv2:
+                    pay.invoice_id = inv2.id
+                db.session.add(pay)
+                db.session.flush()
+                if inv2:
+                    inv2.update_status()
+                    db.session.add(inv2)
+                    db.session.flush()
+                    msg_parts.append(f'{inv2.invoice_number}: {amt:.2f}')
+                else:
+                    msg_parts.append(f'عام: {amt:.2f}')
+                log = SystemLog(
+                    action='payment_add',
+                    details=f'دفعة {amt:.2f} ج.م ' + (f'على الفاتورة {inv2.invoice_number}' if inv2 else 'عام'),
+                    user_id=current_user.id
+                )
+                db.session.add(log)
+            db.session.commit()
+            send_message('تم تسجيل الدفعات العامة: ' + '; '.join(msg_parts))
+            flash('تم تسجيل الدفعات العامة بنجاح', 'success')
+            return redirect(url_for('operations.index'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'خطأ في معالجة الدفعات العامة: {str(e)}', 'danger')
+            return redirect(url_for('operations.add_general_payment'))
+
+    return render_template('operations/add_general_payment.html', form=form)
 
 
 @operations_bp.route('/add_payment/<int:invoice_id>', methods=['GET', 'POST'])
@@ -371,52 +492,71 @@ def add_payment(invoice_id):
 
     if form.validate_on_submit():
         try:
-            # Validate payment amount
+            # Validate and distribute payment amount
             payment_amount = round(float(form.amount.data), 2)
-            remaining_amount = invoice.calculate_remaining_amount()
-
             if payment_amount <= 0:
                 flash('مبلغ الدفع يجب أن يكون أكبر من 0', 'danger')
                 return redirect(url_for('operations.add_payment', invoice_id=invoice_id))
-
-            if payment_amount > remaining_amount:
-                flash(f'مبلغ الدفع ({payment_amount:.2f} ج.م) يتجاوز المبلغ المتبقي ({remaining_amount:.2f} ج.م)', 'danger')
-                return redirect(url_for('operations.add_payment', invoice_id=invoice_id))
-
-            # Create payment record
-            payment = Payment(
-                invoice_id=invoice_id,
-                amount=payment_amount,
-                payment_date=form.payment_date.data,
-                payment_method=form.payment_method.data,
-                reference_number=form.reference_number.data,
-                notes=form.notes.data,
-                created_by=current_user.id
-            )
-
-            # Set client or supplier based on invoice type
-            if invoice.type in ['sale', 'return']:
-                payment.client_id = invoice.client_id
+            # Build list of invoices: current then other unpaid (same client/supplier)
+            queue = [invoice]
+            if invoice.client_id:
+                others = Invoice.query.filter(Invoice.client_id==invoice.client_id, Invoice.id!=invoice.id).order_by(Invoice.date.asc()).all()
             else:
-                payment.supplier_id = invoice.supplier_id
-
-            # Add payment and update invoice status
-            db.session.add(payment)
-            invoice.update_status()
-
-            # Log the payment
-            entity_name = invoice.client.name if invoice.client_id else invoice.supplier.name
-            log = SystemLog(
-                action='payment_add',
-                details=f'إضافة دفعة للفاتورة {invoice.invoice_number} ({entity_name}): {payment_amount} ج.م',
-                user_id=current_user.id
-            )
-            db.session.add(log)
-
+                others = Invoice.query.filter(Invoice.supplier_id==invoice.supplier_id, Invoice.id!=invoice.id).order_by(Invoice.date.asc()).all()
+            queue.extend(others)
+            # Allocate payment across invoices
+            allocations = []
+            remaining = payment_amount
+            for inv2 in queue:
+                rem_amt = inv2.calculate_remaining_amount()
+                if rem_amt <= 0:
+                    continue
+                alloc_amt = min(remaining, rem_amt)
+                allocations.append((inv2, alloc_amt))
+                remaining -= alloc_amt
+                if remaining <= 0:
+                    break
+            # Excess goes to general (no invoice)
+            if remaining > 0:
+                allocations.append((None, remaining))
+            # Create payments and logs
+            msg_parts = []
+            for inv2, amt in allocations:
+                pay = Payment(
+                    amount=amt,
+                    payment_date=form.payment_date.data,
+                    payment_method=form.payment_method.data,
+                    reference_number=form.reference_number.data,
+                    notes=form.notes.data,
+                    created_by=current_user.id
+                )
+                if inv2:
+                    pay.invoice_id = inv2.id
+                    if inv2.type in ['sale','return']:
+                        pay.client_id = inv2.client_id
+                    else:
+                        pay.supplier_id = inv2.supplier_id
+                db.session.add(pay)
+                db.session.flush()
+                if inv2:
+                    # Update invoice status and persist
+                    inv2.update_status()
+                    db.session.add(inv2)
+                    db.session.flush()
+                    msg_parts.append(f'{inv2.invoice_number}: {amt:.2f}')
+                else:
+                    msg_parts.append(f'عام: {amt:.2f}')
+                log = SystemLog(
+                    action='payment_add',
+                    details=f'دفعة {amt:.2f} ج.م على ' + (f'الفاتورة {inv2.invoice_number}' if inv2 else 'مصروف عام'),
+                    user_id=current_user.id
+                )
+                db.session.add(log)
             db.session.commit()
-            flash(f'تم إضافة الدفعة بمبلغ {payment_amount} ج.م بنجاح', 'success')
-            return redirect(url_for('operations.view_invoice', invoice_id=invoice_id))
-
+            # Notify
+            send_message('تم تسجيل الدفعات: ' + '; '.join(msg_parts))
+            flash('تم تسجيل الدفعات بنجاح', 'success')
+            return redirect(url_for('operations.index'))
         except ValueError as e:
             db.session.rollback()
             flash('خطأ في قيمة المبلغ المدخل', 'danger')
@@ -452,21 +592,91 @@ def get_product_details(product_id):
 @login_required
 @admin_required
 def delete_invoice(invoice_id):
+    form = DeleteInvoiceForm()
+    if not form.validate_on_submit():
+        flash('خطأ في التحقق من صحة النموذج', 'danger')
+        return redirect(url_for('inventory.index'))
     invoice = Invoice.query.get_or_404(invoice_id)
     
-    # Log the deletion
+    # Get related data for logging
+    items_count = len(invoice.items)
+    payments_count = len(invoice.payments)
+    
+    # Check if invoice has payments
+    if payments_count > 0:
+        flash(f'لا يمكن حذف الفاتورة لأن لديها {payments_count} دفعة مسجلة', 'danger')
+        return redirect(url_for('operations.view_invoice', invoice_id=invoice.id))
+    
+    # Update product quantities for sale/purchase invoices
+    for item in invoice.items:
+        product = item.product
+        if invoice.type == 'sale':
+            product.quantity += item.quantity  # Restore sold quantity
+        elif invoice.type == 'purchase':
+            product.quantity -= item.quantity  # Remove purchased quantity
+        elif invoice.type == 'return':
+            product.quantity -= item.quantity  # Remove returned quantity
+        elif invoice.type == 'supplier_return':
+            product.quantity += item.quantity  # Restore returned quantity
+    
+    # Log the deletion with details
     log = SystemLog(
         action='invoice_delete',
-        details=f'حذف الفاتورة: {invoice.invoice_number}',
+        details=f'حذف الفاتورة: {invoice.invoice_number} مع {items_count} منتج و {payments_count} دفعة',
         user_id=current_user.id
     )
     
     db.session.add(log)
-    db.session.delete(invoice)
+    db.session.delete(invoice)  # This will cascade delete all related records
     db.session.commit()
     
-    flash('تم حذف الفاتورة بنجاح', 'success')
-    return redirect(url_for('operations.index'))
+    flash(f'تم حذف الفاتورة {invoice.invoice_number} وجميع السجلات المرتبطة بها بنجاح', 'success')
+    return redirect(url_for('inventory.index'))
+
+@operations_bp.route('/delete_payment/<int:payment_id>', methods=['POST'])
+@login_required
+@admin_required
+def delete_payment(payment_id):
+    form = DeletePaymentForm()
+    if not form.validate_on_submit():
+        flash('خطأ في التحقق من صحة النموذج', 'danger')
+        return redirect(url_for('operations.index'))
+    payment = Payment.query.get_or_404(payment_id)
+
+    # Store related invoice and client info before deletion
+    invoice_id = payment.invoice_id
+    client_id = payment.client_id
+
+    # Log the deletion
+    log = SystemLog(
+        action='delete_payment',
+        details=f'Payment ID: {payment.id}, Amount: {payment.amount}, Date: {payment.payment_date.strftime("%Y-%m-%d")}, Method: {payment.payment_method}, Invoice ID: {payment.invoice_id}, Client ID: {payment.client_id}',
+        user_id=current_user.id
+    )
+    db.session.add(log)
+
+    # Delete the payment
+    db.session.delete(payment)
+    db.session.commit()
+
+    # Update invoice status if payment was linked to an invoice
+    if invoice_id:
+        invoice = Invoice.query.get(invoice_id)
+        if invoice:
+            invoice.update_status()
+            db.session.commit()
+
+    flash('تم حذف الدفعة بنجاح', 'success')
+
+    # Redirect based on context
+    if 'HTTP_REFERER' in request.environ:
+        return redirect(request.environ['HTTP_REFERER'])
+    elif invoice_id:
+        return redirect(url_for('operations.view_invoice', invoice_id=invoice_id))
+    elif client_id:
+        return redirect(url_for('clients.view', client_id=client_id))
+    else:
+        return redirect(url_for('operations.index'))
 
 @operations_bp.route('/export_invoice_pdf/<int:invoice_id>')
 @login_required

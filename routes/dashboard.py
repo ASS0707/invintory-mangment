@@ -3,8 +3,8 @@ from flask_login import login_required
 from sqlalchemy import func
 from datetime import datetime, timedelta
 
-from app import db
 from models import Product, Client, Supplier, Invoice, Payment, FinancialEntry
+from database import db
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
@@ -42,31 +42,36 @@ def index():
 
 
 def calculate_total_cash():
-    """Calculate total cash available"""
-    # Sum of all sale invoices (paid amount)
-    sales_income = db.session.query(func.sum(Payment.amount)) \
+    """Calculate total cash available including all payments and financial entries"""
+    # Inflows: sales and supplier returns
+    sale_income = db.session.query(func.sum(Payment.amount)) \
         .join(Invoice, Payment.invoice_id == Invoice.id) \
         .filter(Invoice.type == 'sale') \
         .scalar() or 0
-    
-    # Sum of all purchase invoices (paid amount)
-    purchases_expense = db.session.query(func.sum(Payment.amount)) \
+    supplier_return_income = db.session.query(func.sum(Payment.amount)) \
         .join(Invoice, Payment.invoice_id == Invoice.id) \
-        .filter(Invoice.type == 'purchase') \
+        .filter(Invoice.type == 'supplier_return') \
         .scalar() or 0
-    
-    # Sum of all manual income entries
     other_income = db.session.query(func.sum(FinancialEntry.amount)) \
         .filter(FinancialEntry.entry_type == 'income') \
         .scalar() or 0
-    
-    # Sum of all manual expense entries
+    # Outflows: purchases, customer returns, and general expenses
+    purchase_outflow = db.session.query(func.sum(Payment.amount)) \
+        .join(Invoice, Payment.invoice_id == Invoice.id) \
+        .filter(Invoice.type == 'purchase') \
+        .scalar() or 0
+    return_outflow = db.session.query(func.sum(Payment.amount)) \
+        .join(Invoice, Payment.invoice_id == Invoice.id) \
+        .filter(Invoice.type == 'return') \
+        .scalar() or 0
+    general_expense = db.session.query(func.sum(Payment.amount)) \
+        .filter(Payment.invoice_id == None) \
+        .scalar() or 0
     other_expenses = db.session.query(func.sum(FinancialEntry.amount)) \
         .filter(FinancialEntry.entry_type == 'expense') \
         .scalar() or 0
-    
-    # Calculate total cash
-    return sales_income - purchases_expense + other_income - other_expenses
+    return sale_income + supplier_return_income + other_income \
+        - (purchase_outflow + return_outflow + general_expense + other_expenses)
 
 
 def calculate_clients_outstanding():

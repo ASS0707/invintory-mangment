@@ -1,6 +1,7 @@
 from datetime import datetime
-from app import db
 from flask_login import UserMixin
+from sqlalchemy import event
+from database import db
 
 
 class User(UserMixin, db.Model):
@@ -35,7 +36,7 @@ class Product(db.Model):
     printing_cost = db.Column(db.Float, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    invoice_items = db.relationship('InvoiceItem', backref='product', lazy=True)
+    invoice_items = db.relationship('InvoiceItem', backref='product', lazy=True, cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Product {self.name} ({self.color})>'
@@ -50,9 +51,9 @@ class Client(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     invoices = db.relationship('Invoice', backref='client', lazy=True, 
-                               foreign_keys='Invoice.client_id')
+                               foreign_keys='Invoice.client_id', cascade='all, delete-orphan')
     payments = db.relationship('Payment', backref='client', lazy=True,
-                              foreign_keys='Payment.client_id')
+                              foreign_keys='Payment.client_id', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Client {self.name}>'

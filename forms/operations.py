@@ -30,6 +30,10 @@ class InvoiceItemForm(FlaskForm):
 class PaymentForm(FlaskForm):
     invoice_id = SelectField('الفاتورة', coerce=int, validators=[Optional()], 
                            choices=[(0, 'دفعة عامة (غير مرتبطة بفاتورة)')], default=0)
+    # For general payments, client is optional
+    client_id = SelectField('العميل', coerce=int, 
+                           validators=[Optional()], 
+                           choices=[])
     amount = FloatField('المبلغ', validators=[DataRequired(), NumberRange(min=0.01)])
     payment_date = DateField('تاريخ الدفع', validators=[DataRequired()], default=datetime.datetime.now)
     payment_method = SelectField('طريقة الدفع', choices=[
@@ -41,3 +45,11 @@ class PaymentForm(FlaskForm):
     reference_number = StringField('رقم مرجعي', validators=[Optional()])
     notes = TextAreaField('ملاحظات', validators=[Optional()])
     submit = SubmitField('إضافة الدفعة')
+
+
+class DeletePaymentForm(FlaskForm):
+    submit = SubmitField('تأكيد الحذف')
+
+
+class DeleteInvoiceForm(FlaskForm):
+    submit = SubmitField('تأكيد الحذف')

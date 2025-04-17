@@ -9,3 +9,7 @@ class SupplierForm(FlaskForm):
     email = StringField('البريد الإلكتروني', validators=[Optional(), Email()])
     address = TextAreaField('العنوان', validators=[Optional()])
     submit = SubmitField('حفظ')
+
+
+class DeleteSupplierForm(FlaskForm):
+    submit = SubmitField('تأكيد الحذف')

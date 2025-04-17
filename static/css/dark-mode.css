@@ -18,8 +18,9 @@ body.dark-mode,
     border-color: #333;
 }
 
-.dark-mode .table {
-    color: #f8f9fa;
+.dark-mode .table,
+.dark-mode .table-responsive {
+    background-color: #1e1e1e !important;
 }
 
 .dark-mode .table thead th {
@@ -28,8 +29,13 @@ body.dark-mode,
     border-color: #333;
 }
 
-.dark-mode .table td,
-.dark-mode .table th {
+.dark-mode .table tbody tr {
+    background-color: #1e1e1e;
+}
+
+.dark-mode .table th,
+.dark-mode .table td {
+    background-color: transparent;
     border-color: #333;
     color: #f8f9fa;
 }

@@ -12,7 +12,19 @@
                 <a href="{{ url_for('operations.create_invoice') }}" class="btn btn-primary">
                     <i class="fas fa-plus-circle me-1"></i> إنشاء فاتورة جديدة
                 </a>
+                <a href="{{ url_for('operations.add_general_payment') }}" class="btn btn-secondary ms-2">
+                    <i class="fas fa-money-bill-wave me-1"></i> إضافة مصروف شركة
+                </a>
                 {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Cash Balance -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="alert alert-info">
+                <strong>الرصيد النقدي الحالي:</strong> {{ cash_balance|egp }}
             </div>
         </div>
     </div>
@@ -85,6 +97,8 @@
                                     <th>تاريخ الاستحقاق</th>
                                     <th>العميل/المورد</th>
                                     <th>المبلغ الإجمالي</th>
+                                    <th>المبلغ المدفوع</th>
+                                    <th>المبلغ المتبقي</th>
                                     <th>الحالة</th>
                                     <th>الإجراءات</th>
                                 </tr>
@@ -124,6 +138,8 @@
                                         {% endif %}
                                     </td>
                                     <td>{{ operation.total_amount|egp }}</td>
+                                    <td>{{ operation.calculate_paid_amount()|egp }}</td>
+                                    <td>{{ operation.calculate_remaining_amount()|egp }}</td>
                                     <td>
                                         {% if operation.status == 'paid' %}
                                             <span class="badge bg-success">مدفوع</span>
@@ -153,7 +169,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="8" class="text-center py-3">لا توجد عمليات مطابقة للبحث</td>
+                                    <td colspan="10" class="text-center py-3">لا توجد عمليات مطابقة للبحث</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -162,6 +178,56 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Payments Section -->
+    <div class="row mt-5">
+      <div class="col">
+        <div class="card border-0 shadow">
+          <div class="card-header bg-dark">
+            <h5 class="mb-0 text-white">الدفعات</h5>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover mb-0">
+                <thead class="bg-light">
+                  <tr>
+                    <th>#</th>
+                    <th>رقم الفاتورة</th>
+                    <th>المبلغ</th>
+                    <th>تاريخ الدفع</th>
+                    <th>طريقة الدفع</th>
+                    <th>رقم مرجعي</th>
+                    <th>ملاحظات</th>
+                    <th>الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for payment in payments %}
+                  <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{% if payment.invoice_id %}<a href="{{ url_for('operations.view_invoice', invoice_id=payment.invoice_id) }}">{{ payment.invoice_id }}</a>{% else %}-{% endif %}</td>
+                    <td>{{ payment.amount|egp }}</td>
+                    <td>{{ payment.payment_date|aradate }}</td>
+                    <td>{{ payment.payment_method }}</td>
+                    <td>{{ payment.reference_number or '-' }}</td>
+                    <td>{{ payment.notes or '-' }}</td>
+                    <td>
+                      <form method="POST" action="{{ url_for('operations.delete_payment', payment_id=payment.id) }}" style="display:inline;">
+                        {{ delete_payment_form.hidden_tag() }}
+                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('هل أنت متأكد أنك تريد حذف هذه الدفعة؟');"><i class="fas fa-trash"></i></button>
+                      </form>
+                    </td>
+                  </tr>
+                  {% else %}
+                  <tr><td colspan="8" class="text-center py-3">لا توجد دفعات مسجلة</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Pagination -->

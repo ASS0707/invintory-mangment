@@ -15,7 +15,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/rtl.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/dark-mode.css') }}">
-    
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#343a40">
     {% block styles %}{% endblock %}
 </head>
 <body class="dark-mode">
@@ -175,17 +176,27 @@
                     </div>
                 </div>
                 
-                <!-- Flash Messages -->
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                        {% for category, message in messages %}
-                            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                                {{ message }}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                            </div>
-                        {% endfor %}
-                    {% endif %}
-                {% endwith %}
+                <!-- Flash Controls and Messages -->
+                <div class="mb-3">
+                    <div class="d-flex justify-content-end mb-1">
+                        <button id="toggleNotifications" type="button" class="btn btn-sm btn-outline-secondary me-1"></button>
+                        <button id="toggleFlashFold" type="button" class="btn btn-sm btn-outline-secondary"><i class="fas fa-chevron-up"></i></button>
+                    </div>
+                    <div id="flash-fold-wrapper">
+                        <div id="flash-container">
+                            {% with messages = get_flashed_messages(with_categories=true) %}
+                                {% if messages %}
+                                    {% for category, message in messages %}
+                                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                            {{ message }}
+                                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                        </div>
+                                    {% endfor %}
+                                {% endif %}
+                            {% endwith %}
+                        </div>
+                    </div>
+                </div>
                 
                 <!-- Page Content -->
                 {% block content %}{% endblock %}
@@ -236,9 +247,66 @@
                     document.querySelector('.main-content').classList.toggle('active');
                 });
             }
+            
+            // Notification Toggle
+            const notificationsToggles = document.querySelectorAll('#toggleNotifications');
+            const flashContainer = document.getElementById('flash-container');
+            let notificationsEnabled = localStorage.getItem('notificationsEnabled') !== 'disabled';
+
+            // Initialize notification visibility
+            if (flashContainer) {
+                flashContainer.classList.toggle('d-none', !notificationsEnabled);
+            }
+            notificationsToggles.forEach(function(toggle) {
+                // set initial icon
+                toggle.innerHTML = notificationsEnabled ? '<i class="fas fa-bell"></i>' : '<i class="fas fa-bell-slash"></i>';
+                toggle.addEventListener('click', function() {
+                    notificationsEnabled = !notificationsEnabled;
+                    localStorage.setItem('notificationsEnabled', notificationsEnabled ? 'enabled' : 'disabled');
+                    if (flashContainer) flashContainer.classList.toggle('d-none', !notificationsEnabled);
+                    // update all toggles
+                    notificationsToggles.forEach(btn => btn.innerHTML = notificationsEnabled ? '<i class="fas fa-bell"></i>' : '<i class="fas fa-bell-slash"></i>');
+                });
+            });
+
+            // Flash fold toggle: support multiple buttons
+            const flashFoldToggles = document.querySelectorAll('#toggleFlashFold');
+            const flashFoldWrapper = document.getElementById('flash-fold-wrapper');
+            flashFoldToggles.forEach(function(toggle) {
+                toggle.addEventListener('click', function() {
+                    if (flashFoldWrapper) flashFoldWrapper.classList.toggle('d-none');
+                    // toggle icons on all buttons
+                    flashFoldToggles.forEach(btn => {
+                        const icon = btn.querySelector('i');
+                        icon.classList.toggle('fa-chevron-up');
+                        icon.classList.toggle('fa-chevron-down');
+                    });
+                });
+            });
+
+            // Dashboard alerts fold toggle
+            const toggleAlertsBtn = document.getElementById('toggleAlerts');
+            const alertsBody = document.getElementById('alerts-body');
+            if (toggleAlertsBtn && alertsBody) {
+                toggleAlertsBtn.addEventListener('click', function() {
+                    alertsBody.classList.toggle('d-none');
+                    const icon = this.querySelector('i');
+                    icon.classList.toggle('fa-chevron-up');
+                    icon.classList.toggle('fa-chevron-down');
+                });
+            }
         });
     </script>
-    
+    <script>
+    // PWA: Register service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register("{{ url_for('static', filename='sw.js') }}")
+          .then(reg => console.log('SW registered:', reg))
+          .catch(err => console.log('SW registration failed:', err));
+      });
+    }
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

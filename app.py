@@ -2,25 +2,22 @@ import os
 import logging
 
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_login import LoginManager
-from flask_mail import Mail
+from flask_wtf.csrf import CSRFProtect
+from database import db
+from mail import mail
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
-
-class Base(DeclarativeBase):
-    pass
-
-
-db = SQLAlchemy(model_class=Base)
 
 # Create the app
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "devkey-changeme-in-production")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
 
 # Load environment variables from .env file if present (for local development)
 try:
@@ -81,9 +78,8 @@ app.config.update(
     MAIL_DEFAULT_SENDER=('نظام إدارة المبيعات', 'badr78439@gmail.com')
 )
 
-mail = Mail()
+# Initialize mail
 mail.init_app(app)
-
 
 # Setup Login Manager
 login_manager = LoginManager()
@@ -92,49 +88,58 @@ login_manager.login_view = 'auth.login'
 login_manager.login_message = 'الرجاء تسجيل الدخول للوصول إلى هذه الصفحة'
 login_manager.login_message_category = 'warning'
 
-# Import and register blueprints
-from routes.auth import auth_bp
-from routes.dashboard import dashboard_bp
-from routes.inventory import inventory_bp
-from routes.clients import clients_bp
-from routes.suppliers import suppliers_bp
-from routes.operations import operations_bp
-from routes.reports import reports_bp
-from routes.admin import admin_bp
+def register_blueprints(app):
+    # Import and register blueprints
+    from routes.auth import auth_bp
+    from routes.dashboard import dashboard_bp
+    from routes.inventory import inventory_bp
+    from routes.clients import clients_bp
+    from routes.suppliers import suppliers_bp
+    from routes.operations import operations_bp
+    from routes.reports import reports_bp
+    from routes.admin import admin_bp
 
-app.register_blueprint(auth_bp)
-app.register_blueprint(dashboard_bp)
-app.register_blueprint(inventory_bp)
-app.register_blueprint(clients_bp)
-app.register_blueprint(suppliers_bp)
-app.register_blueprint(operations_bp)
-app.register_blueprint(reports_bp)
-app.register_blueprint(admin_bp)
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(dashboard_bp)
+    app.register_blueprint(inventory_bp)
+    app.register_blueprint(clients_bp)
+    app.register_blueprint(suppliers_bp)
+    app.register_blueprint(operations_bp)
+    app.register_blueprint(reports_bp)
+    app.register_blueprint(admin_bp)
+
+def init_database(app):
+    # Initialize database
+    with app.app_context():
+        # Import models
+        import models
+
+        # Create database tables
+        db.create_all()
+
+        # Create admin user if it doesn't exist
+        from models import User
+        from werkzeug.security import generate_password_hash
+
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            admin = User(
+                username='admin',
+                email='admin@example.com',
+                password_hash=generate_password_hash('admin'),
+                role='admin'
+            )
+            db.session.add(admin)
+            db.session.commit()
+            app.logger.info('Created admin user')
+
+# Register blueprints
+register_blueprints(app)
 
 # Initialize database
-with app.app_context():
-    # Import models
-    import models
+init_database(app)
 
-    # Create database tables
-    db.create_all()
-
-    # Create admin user if it doesn't exist
-    from models import User
-    from werkzeug.security import generate_password_hash
-
-    admin = User.query.filter_by(username='admin').first()
-    if not admin:
-        admin = User(
-            username='admin',
-            email='admin@example.com',
-            password_hash=generate_password_hash('admin'),
-            role='admin'
-        )
-        db.session.add(admin)
-        db.session.commit()
-        app.logger.info('Created admin user')
-
+import notifications  # initialize Telegram notifications scheduler
 
 @login_manager.user_loader
 def load_user(user_id):

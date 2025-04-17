@@ -17,9 +17,16 @@
                 <h1 class="display-5 mb-4">
                     <i class="fas fa-box me-2"></i>تفاصيل المنتج
                 </h1>
-                <a href="{{ url_for('inventory.edit', product_id=product.id) }}" class="btn btn-warning">
-                    <i class="fas fa-edit me-1"></i> تعديل المنتج
-                </a>
+                <div class="btn-group">
+                    <a href="{{ url_for('inventory.edit', product_id=product.id) }}" class="btn btn-warning">
+                        <i class="fas fa-edit me-1"></i> تعديل المنتج
+                    </a>
+                    {% if current_user.role == 'admin' %}
+                    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteProductModal">
+                        <i class="fas fa-trash me-1"></i> حذف المنتج
+                    </button>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>
@@ -140,4 +147,38 @@
         </div>
     </div>
 </div>
+
+<!-- Delete Product Modal -->
+<div class="modal fade" id="deleteProductModal" tabindex="-1" aria-labelledby="deleteProductModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteProductModalLabel">تأكيد حذف المنتج</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>هل أنت متأكد من حذف المنتج "{{ product.name }}"؟</p>
+                <p class="text-danger">لا يمكن حذف المنتج إذا كان مستخدماً في أي فواتير.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <form action="{{ url_for('inventory.delete', product_id=product.id) }}" method="post" class="d-inline">
+                    {{ delete_product_form.hidden_tag() }}
+                    {{ delete_product_form.submit(class="btn btn-danger") }}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
+<!-- Delete Invoice Form -->
+<form action="{{ url_for('operations.delete_invoice', invoice_id=invoice.id) }}" method="post" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+</form>
+
+<!-- Delete Payment Form -->
+<form action="{{ url_for('operations.delete_payment', payment_id=payment.id) }}" method="post" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+</form>

@@ -28,22 +28,22 @@ def profit_report():
     
     # Base queries
     sales_query = db.session.query(
-        func.date_format(Invoice.date, '%Y-%m').label('month'),
+        func.strftime('%Y-%m', Invoice.date).label('month'),
         func.sum(Invoice.total_amount).label('amount')
     ).filter(Invoice.type == 'sale')
     
     purchases_query = db.session.query(
-        func.date_format(Invoice.date, '%Y-%m').label('month'),
+        func.strftime('%Y-%m', Invoice.date).label('month'),
         func.sum(Invoice.total_amount).label('amount')
     ).filter(Invoice.type == 'purchase')
     
     returns_query = db.session.query(
-        func.date_format(Invoice.date, '%Y-%m').label('month'),
+        func.strftime('%Y-%m', Invoice.date).label('month'),
         func.sum(Invoice.total_amount).label('amount')
     ).filter(Invoice.type == 'return')
     
     supplier_returns_query = db.session.query(
-        func.date_format(Invoice.date, '%Y-%m').label('month'),
+        func.strftime('%Y-%m', Invoice.date).label('month'),
         func.sum(Invoice.total_amount).label('amount')
     ).filter(Invoice.type == 'supplier_return')
     
@@ -400,7 +400,7 @@ def export_profit_report():
     
     # Base queries (same as in profit_report view)
     sales_query = db.session.query(
-        func.date_format(Invoice.date, '%Y-%m').label('month'),
+        func.strftime('%Y-%m', Invoice.date).label('month'),
         func.sum(Invoice.total_amount).label('amount')
     ).filter(Invoice.type == 'sale')
     

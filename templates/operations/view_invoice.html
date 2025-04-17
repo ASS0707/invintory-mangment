@@ -36,11 +36,12 @@
                         <i class="fas fa-money-bill-wave me-1"></i> إضافة دفعة
                     </a>
                     {% endif %}
+                    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteInvoiceModal">
+                        <i class="fas fa-trash me-1"></i> حذف الفاتورة
+                    </button>
                     {% endif %}
                     <button type="button" class="btn btn-primary" onclick="printInvoice()">
-                        <i class="fas fa-print me-1"></i> طباعة</button>
-                    <a href="{{ url_for('operations.export_invoice_pdf', invoice_id=invoice.id) }}" class="btn btn-danger">
-                        <i class="fas fa-file-pdf me-1"></i> تصدير PDF</a>
+                        <i class="fas fa-print me-1"></i> طباعة
                     </button>
                     <a href="{{ url_for('operations.export_invoice_pdf', invoice_id=invoice.id) }}" class="btn btn-danger">
                         <i class="fas fa-file-pdf me-1"></i> تصدير PDF
@@ -257,6 +258,9 @@
                                         <th>طريقة الدفع</th>
                                         <th>الرقم المرجعي</th>
                                         <th>ملاحظات</th>
+                                        {% if current_user.role == 'admin' %}
+                                        <th>إجراءات</th>
+                                        {% endif %}
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -278,10 +282,17 @@
                                         </td>
                                         <td>{{ payment.reference_number or '-' }}</td>
                                         <td>{{ payment.notes or '-' }}</td>
+                                        {% if current_user.role == 'admin' %}
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deletePaymentModal{{ payment.id }}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                        {% endif %}
                                     </tr>
                                     {% else %}
                                     <tr>
-                                        <td colspan="6" class="text-center py-3">لا توجد مدفوعات لهذه الفاتورة</td>
+                                        <td colspan="{% if current_user.role == 'admin' %}7{% else %}6{% endif %}" class="text-center py-3">لا توجد مدفوعات لهذه الفاتورة</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -293,6 +304,59 @@
         </div>
     </div>
 </div>
+</div>
+
+<!-- Delete Invoice Modal -->
+<div class="modal fade" id="deleteInvoiceModal" tabindex="-1" aria-labelledby="deleteInvoiceModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteInvoiceModalLabel">تأكيد حذف الفاتورة</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>هل أنت متأكد من حذف الفاتورة رقم "{{ invoice.invoice_number }}"؟</p>
+                {% if invoice.status == 'paid' %}
+                <p class="text-danger">تحذير: هذه الفاتورة مدفوعة بالكامل. حذفها سيحذف جميع المدفوعات المرتبطة بها.</p>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <form action="{{ url_for('operations.delete_invoice', invoice_id=invoice.id) }}" method="post" class="d-inline">
+                    {{ delete_invoice_form.hidden_tag() }}
+                    {{ delete_invoice_form.submit(class="btn btn-danger") }}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+    </div>
+</div>
+
+<!-- Delete Payment Modals -->
+{% for payment in payments %}
+<div class="modal fade" id="deletePaymentModal{{ payment.id }}" tabindex="-1" aria-labelledby="deletePaymentModalLabel{{ payment.id }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deletePaymentModalLabel{{ payment.id }}">تأكيد حذف الدفعة</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>هل أنت متأكد من حذف الدفعة بقيمة {{ payment.amount|egp }} بتاريخ {{ payment.payment_date|aradate }}؟</p>
+                <p class="text-danger">سيتم تحديث حالة الفاتورة والمبلغ المتبقي تلقائياً.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                <form action="{{ url_for('operations.delete_payment', payment_id=payment.id) }}" method="post" class="d-inline">
+                    {{ delete_payment_forms[payment.id].hidden_tag() }}
+                    {{ delete_payment_forms[payment.id].submit(class="btn btn-danger") }}
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 
 {% block extra_js %}
 <script>
